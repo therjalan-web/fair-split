@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
+from llm_client import AllProvidersFailed, configured_providers
 from receipt_parser import parse_receipt
 from description_parser import parse_description
 from split_engine import compute_split
@@ -69,8 +70,11 @@ async def split_bill(request: SplitRequest):
     if not request.description.strip():
         raise HTTPException(status_code=422, detail="description is empty")
 
-    # ── 2. Parse receipt image via Gemini vision ──────────────────────────
-    receipt_data, receipt_flags = parse_receipt(request.receipt_base64)
+    # ── 2. Parse receipt image via vision model ───────────────────────────
+    try:
+        receipt_data, receipt_flags = parse_receipt(request.receipt_base64)
+    except AllProvidersFailed as e:
+        raise HTTPException(status_code=503, detail={"error": str(e)})
 
     if not receipt_data:
         # Parser returned empty dict → image unreadable
@@ -85,11 +89,14 @@ async def split_bill(request: SplitRequest):
     if receipt_data.get("grand_total", 0) == 0:
         receipt_flags.append("Grand total extracted as 0 — result may be unreliable")
 
-    # ── 3. Parse description via Gemini text ──────────────────────────────
-    desc_data, desc_assumptions, desc_flags = parse_description(
-        request.description,
-        receipt_data.get("items", []),
-    )
+    # ── 3. Parse description via text model ───────────────────────────────
+    try:
+        desc_data, desc_assumptions, desc_flags = parse_description(
+            request.description,
+            receipt_data.get("items", []),
+        )
+    except AllProvidersFailed as e:
+        raise HTTPException(status_code=503, detail={"error": str(e)})
 
     all_people: list[str] = desc_data.get("people", [])
     paid_by: str | None = desc_data.get("paid_by")
@@ -114,7 +121,11 @@ async def split_bill(request: SplitRequest):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "gemini_key_set": bool(os.environ.get("GEMINI_API_KEY"))}
+    providers = configured_providers()
+    return {
+        "status": "ok" if providers else "no_api_key_configured",
+        "providers": providers,
+    }
 
 
 # ── Frontend ──────────────────────────────────────────────────────────────

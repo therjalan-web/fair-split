@@ -210,3 +210,23 @@ The item amount is then excluded from splits (conservative: don't silently distr
 **Input:** Alice ate all items; Bob was present but had nothing. Bob paid.  
 **Handling:** Bob gets subtotal=0, total=0. Alice's total = grand_total. Settle-up: Alice owes Bob the full amount.  
 **Verified:** ✓ — `test_one_person_all_items` passes.
+
+---
+
+## 26. Model provider down or rate-limited mid-demo
+
+**Input:** Any request while the primary provider (Gemini) errors or hits its rate limit.
+**Handling:** `llm_client.py` tries providers in order (Gemini → OpenRouter → Groq-text) and only fails if every configured provider errors, returning HTTP 503 with the per-provider error list — never a fabricated split.
+**Verified:** ✓ — `test_no_api_key_returns_503` passes; fallback chain unit-logic reviewed.
+
+## 27. Invalid base64 / non-image payload
+
+**Input:** `receipt_base64` containing garbage text.
+**Handling:** Decode failure returns HTTP 422 with "Could not decode base64 image" — no model call is wasted.
+**Verified:** ✓ — `test_bad_base64_flagged` passes.
+
+---
+
+## Stress-test kit
+
+`samples/` contains generated receipt images used to probe the cases above against the deployed endpoint: R1–R4 (spec receipts) plus S1 (no service charge + CGST/SGST lines), S2 (printed total ₹20 higher than items+tax — must be flagged, not absorbed), S3 (tip + delivery fee), S4 (complimentary ₹0 item), S5 (odd quantities across 3 people). Regenerate with `python samples/make_receipts.py`.
