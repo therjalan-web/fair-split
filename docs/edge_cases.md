@@ -19,7 +19,7 @@ Each case: input shape · how the tool handles it · verified (✓/✗/partial).
 - `reconciliation` reports `sum_of_person_totals` vs `grand_total` (always shown).
 - A second flag fires: "Extracted line items + charges sum to ₹980.00 but printed grand total is ₹1000 — ₹20.00 unexplained."  
 **Handling choice:** The split is still computed using the printed grand total as the target. The unexplained gap is flagged, not silently absorbed.  
-**Verified:** ✓ — Manually confirmed flag text.
+**Verified:** ✓ — `test_bill_total_mismatch_flagged` passes.
 
 ---
 
@@ -68,9 +68,9 @@ The item amount is then excluded from splits (conservative: don't silently distr
 ## 8. Tip not covered by fairness rules
 
 **Input:** Receipt has a "Tip" or "Gratuity" line.  
-**Handling:** Receipt parser extracts it as a line item. Since the fairness rules don't define how to allocate a tip (unlike tax and service charge), the split engine treats it as an ordinary line item — it will appear in the assignments unallocated if the description doesn't mention it, triggering edge case #4's flag. The flag text calls out "Tip" explicitly.  
-**Handling choice:** We chose to flag rather than guess. Allocating tip proportionally would be reasonable but is outside the spec's fairness rules.  
-**Verified:** Partial — logic confirmed; live receipt needed.
+**Handling:** Receipt parser extracts tip as a line item (NOT as service_charge). If the description doesn't assign it, `shared_by: []` and a flag fires: "'Tip' (₹N) is a tip/gratuity — outside the spec's fairness rules. Include explicitly in description to split it." The tip amount is excluded from the per-person split.  
+**Handling choice:** We chose to flag rather than guess. The user's description can explicitly say "we split the tip" to include it.  
+**Verified:** ✓ — `test_tip_flagged` passes.
 
 ---
 
@@ -143,7 +143,7 @@ The item amount is then excluded from splits (conservative: don't silently distr
 
 **Input:** Assignments reference "Rahul" but he wasn't in `all_people`.  
 **Handling:** Split engine detects new name, adds to `all_people`, and flags: "Person 'Rahul' from description not in initial people list — added."  
-**Verified:** ✓ — Defensive code path in `split_engine.py`.
+**Verified:** ✓ — `test_new_person_from_description` passes.
 
 ---
 
@@ -152,3 +152,61 @@ The item amount is then excluded from splits (conservative: don't silently distr
 **Input:** Heavily discounted bill where payer's own share is less than zero (theoretical).  
 **Handling:** If `floored[payer] < 0`, split engine creates a reverse settle-up entry (`from: payer, to: person`). Practically won't happen on real bills.  
 **Verified:** Not verified — theoretical edge case.
+
+---
+
+## 19. Tip / Gratuity line on bill
+
+**Input:** Receipt has a "Tip" or "Staff Tip" line item.  
+**Handling:** The spec's fairness rules don't define how to allocate a tip. The receipt parser is instructed to include tips as line items (not as service_charge). In split_engine, if a tip item has no one assigned (`shared_by: []`), it fires a specific flag: *"'Tip' (₹N) is a tip/gratuity — outside the spec's fairness rules. Include explicitly in description to split it."* The tip is excluded from the per-person split; grand_total is still the authoritative target.  
+**Handling choice:** Fail loudly, don't silently add tip to everyone's share. The user's description can explicitly say "we split the tip" to include it.  
+**Verified:** ✓ — `test_tip_flagged` passes.
+
+---
+
+## 20. Delivery / Packing charge on bill
+
+**Input:** Swiggy/Zomato-style bill with a "Delivery Fee ₹50" or "Packing Charge ₹30".  
+**Handling:** The receipt parser extracts it into a `delivery_charge.amount` field (not service_charge). Split engine allocates it proportionally to each person's subtotal, the same as service charge. An assumption is recorded: *"Delivery/packing charge ₹50 allocated proportionally (outside spec fairness rules — reasonable default)."*  
+**Handling choice:** Proportional allocation is the fairest default — those who ordered more pay more of the delivery fee.  
+**Verified:** ✓ — `test_delivery_charge` passes.
+
+---
+
+## 21. CGST + SGST shown as two separate lines
+
+**Input:** Indian restaurant bill shows "CGST 2.5% ₹27.30" and "SGST 2.5% ₹27.30" on separate lines.  
+**Handling:** Receipt parser prompt v4 explicitly instructs: sum CGST + SGST into `tax.amount` (27.30 + 27.30 = 54.60), set `tax.label` to "CGST+SGST". Split engine receives a single combined `tax_amount` — no change needed there.  
+**Verified:** ✓ — `test_cgst_sgst_combined` passes (arithmetic is identical to single-GST bills).
+
+---
+
+## 22. Complimentary / free item on bill
+
+**Input:** Bill includes "Complimentary Dessert" at ₹0 (e.g., loyalty reward or house gift).  
+**Handling:** Receipt parser includes it in `items[]` with `total: 0`. Split engine detects `amount == 0`, records *"'Complimentary Dessert' is complimentary (₹0) — included in split with no cost"* in assumptions, and skips the cost allocation. The item name still appears in each person's `items` list so they can see they received it.  
+**Verified:** ✓ — `test_complimentary_item` passes.
+
+---
+
+## 23. Loyalty points / wallet balance deducted
+
+**Input:** Bill shows "Zomato Credits −₹80" as a deduction.  
+**Handling:** Receipt parser prompt v4 instructs: treat loyalty/points deductions as a `discount.amount` (positive number), note the type in `discount.code`. Split engine then allocates proportionally just like any other discount.  
+**Verified:** Partial — prompt instruction in place; requires live test.
+
+---
+
+## 24. Large group (6+ people) rounding
+
+**Input:** ₹1000 among 6 people → ₹166.67 each exactly.  
+**Handling:** Floor each person to ₹166, leaving residual of ₹4. Assign +₹1 to the 4 people with the largest fractional remainders (all equal at 0.6667, so the first 4 in sorted order). Result: 4 people pay ₹167, 2 pay ₹166. Stated in assumptions.  
+**Verified:** ✓ — `test_large_group_6_people` passes; totals.count(167) == 4.
+
+---
+
+## 25. One person ordered everything (solo within a group)
+
+**Input:** Alice ate all items; Bob was present but had nothing. Bob paid.  
+**Handling:** Bob gets subtotal=0, total=0. Alice's total = grand_total. Settle-up: Alice owes Bob the full amount.  
+**Verified:** ✓ — `test_one_person_all_items` passes.
