@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fair Split — Restaurant Bill Splitter</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3350;
+      --accent: #5c6bff;
+      --accent2: #7c3aed;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #f59e0b;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px 60px;
+    }
+
+    header {
+      max-width: 860px;
+      margin: 0 auto 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    header .logo {
+      font-size: 28px;
+    }
+
+    header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #5c6bff, #7c3aed);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    header p {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    /* ── Upload area ─────────────────────────────────────────────── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(92, 107, 255, 0.05);
+    }
+
+    .upload-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .upload-zone .icon { font-size: 32px; margin-bottom: 8px; }
+
+    .upload-zone p {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .upload-zone p span {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    #image-preview {
+      max-height: 200px;
+      border-radius: 8px;
+      object-fit: contain;
+      display: none;
+      margin: 0 auto;
+    }
+
+    /* ── Textarea ─────────────────────────────────────────────────── */
+    textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.6;
+      padding: 12px 14px;
+      resize: vertical;
+      min-height: 100px;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    textarea::placeholder { color: var(--muted); }
+
+    /* ── Button ──────────────────────────────────────────────────── */
+    button#split-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      letter-spacing: 0.03em;
+    }
+
+    button#split-btn:hover { opacity: 0.9; }
+    button#split-btn:active { transform: scale(0.99); }
+    button#split-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Spinner ─────────────────────────────────────────────────── */
+    .spinner {
+      display: none;
+      width: 20px; height: 20px;
+      border: 3px solid rgba(255,255,255,0.2);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Results ─────────────────────────────────────────────────── */
+    #results { display: none; }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    /* Per-person table */
+    .breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .breakdown-table th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .breakdown-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(46,51,80,0.5);
+      vertical-align: top;
+    }
+
+    .breakdown-table tr:last-child td { border-bottom: none; }
+
+    .breakdown-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .name-cell {
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .items-cell {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .amount-cell {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .total-cell {
+      text-align: right;
+      font-weight: 700;
+      font-size: 15px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .discount-val { color: var(--green); }
+
+    .grand-total-row td {
+      border-top: 2px solid var(--border);
+      font-weight: 700;
+      font-size: 14px;
+      padding-top: 14px;
+    }
+
+    /* Reconciliation badge */
+    .recon-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .recon-ok   { background: rgba(34,197,94,0.15); color: var(--green); }
+    .recon-fail { background: rgba(239,68,68,0.15);  color: var(--red); }
+
+    /* Settle-up */
+    .settle-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .settle-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 14px;
+    }
+
+    .settle-item .arrow { color: var(--muted); margin: 0 8px; }
+    .settle-item .amount { font-weight: 700; color: var(--accent); font-size: 16px; }
+    .settle-item .payer { font-weight: 600; }
+
+    /* Flags & assumptions */
+    .flag-list, .assumption-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .flag-item, .assumption-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .flag-item     { background: rgba(245,158,11,0.1);  border-left: 3px solid var(--yellow); }
+    .assumption-item { background: rgba(92,107,255,0.08); border-left: 3px solid var(--accent); }
+
+    .flag-icon, .assumption-icon { flex-shrink: 0; font-size: 14px; }
+
+    /* Error state */
+    .error-box {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px;
+      padding: 16px;
+      color: var(--red);
+      font-size: 14px;
+    }
+
+    /* Paid-by chip */
+    .paid-by-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(124,58,237,0.15);
+      border: 1px solid rgba(124,58,237,0.3);
+      color: #a78bfa;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    @media (max-width: 600px) {
+      .breakdown-table th:nth-child(3),
+      .breakdown-table td:nth-child(3),
+      .breakdown-table th:nth-child(4),
+      .breakdown-table td:nth-child(4),
+      .breakdown-table th:nth-child(5),
+      .breakdown-table td:nth-child(5) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🍽️</div>
+  <div>
+    <h1>Fair Split</h1>
+    <p>Upload a restaurant bill · describe who had what · get a fair breakdown</p>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Input card -->
+  <div class="card">
+    <label>Receipt Image</label>
+    <div class="upload-zone" id="upload-zone">
+      <input type="file" id="file-input" accept="image/*" />
+      <img id="image-preview" alt="Receipt preview" />
+      <div id="upload-placeholder">
+        <div class="icon">📷</div>
+        <p><span>Click to upload</span> or drag & drop</p>
+        <p style="margin-top:4px; font-size:12px">JPG, PNG, WebP</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>Who had what?</label>
+    <textarea
+      id="description"
+      placeholder='e.g. "Three of us — Ravi, Neha, Sameer. Ravi had the cappuccino and the sandwich. Neha had the pasta and the lime soda. Sameer had the brownie. Sameer paid."'
+    ></textarea>
+  </div>
+
+  <button id="split-btn" onclick="doSplit()">
+    <span id="btn-text">Split the Bill</span>
+    <div class="spinner" id="spinner"></div>
+  </button>
+
+  <!-- Results -->
+  <div id="results"></div>
+
+</div>
+
+<script>
+// ── File input & drag-drop ────────────────────────────────────────────────
+const zone     = document.getElementById('upload-zone');
+const fileInput= document.getElementById('file-input');
+const preview  = document.getElementById('image-preview');
+const placeholder = document.getElementById('upload-placeholder');
+
+let base64Data = null;
+
+fileInput.addEventListener('change', handleFile);
+
+zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (file) loadFile(file);
+}
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const dataURL = ev.target.result;
+    // Strip data-URI prefix; API wants raw base64
+    base64Data = dataURL.split(',')[1];
+    preview.src = dataURL;
+    preview.style.display = 'block';
+    placeholder.style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── API call ──────────────────────────────────────────────────────────────
+async function doSplit() {
+  const description = document.getElementById('description').value.trim();
+
+  if (!base64Data) { showError('Please upload a receipt image.'); return; }
+  if (!description) { showError('Please describe who had what.'); return; }
+
+  setLoading(true);
+  document.getElementById('results').innerHTML = '';
+
+  try {
+    const resp = await fetch('/split', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ receipt_base64: base64Data, description }),
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      const msg = data.detail?.error || data.detail || data.error || JSON.stringify(data);
+      showError(msg, data.detail?.flags || data.flags);
+      return;
+    }
+
+    renderResults(data);
+  } catch (err) {
+    showError(`Network error: ${err.message}`);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function setLoading(on) {
+  const btn     = document.getElementById('split-btn');
+  const btnText = document.getElementById('btn-text');
+  const spinner = document.getElementById('spinner');
+  btn.disabled    = on;
+  btnText.style.display = on ? 'none' : 'inline';
+  spinner.style.display = on ? 'block' : 'none';
+}
+
+// ── Render helpers ────────────────────────────────────────────────────────
+function rs(n) {
+  if (n === null || n === undefined) return '—';
+  const sign = n < 0 ? '-' : '';
+  return sign + '₹' + Math.abs(n).toLocaleString('en-IN');
+}
+
+function renderResults(d) {
+  const el = document.getElementById('results');
+  el.style.display = 'block';
+  el.innerHTML = '';
+
+  // ── Per-person breakdown ───────────────────────────────────────────
+  const breakdownCard = div('card');
+  breakdownCard.innerHTML = `<div class="section-title">Per-Person Breakdown</div>`;
+
+  const table = document.createElement('table');
+  table.className = 'breakdown-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Person</th>
+        <th>Items</th>
+        <th>Subtotal</th>
+        <th>Tax</th>
+        <th>Service</th>
+        <th>Discount</th>
+        <th style="text-align:right">Total</th>
+      </tr>
+    </thead>
+    <tbody id="breakdown-body"></tbody>
+  `;
+
+  const tbody = table.querySelector('#breakdown-body');
+  for (const p of d.per_person) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="name-cell">${esc(p.name)}</td>
+      <td class="items-cell">${p.items.map(i => esc(i)).join('<br>')}</td>
+      <td class="amount-cell">${rs(p.subtotal)}</td>
+      <td class="amount-cell">${rs(p.tax_share)}</td>
+      <td class="amount-cell">${rs(p.service_share)}</td>
+      <td class="amount-cell ${p.discount_share < 0 ? 'discount-val' : ''}">${rs(p.discount_share)}</td>
+      <td class="total-cell">${rs(p.total)}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  // Grand total footer row
+  const totalRow = document.createElement('tr');
+  totalRow.className = 'grand-total-row';
+  totalRow.innerHTML = `
+    <td colspan="6">Grand Total</td>
+    <td class="total-cell">${rs(d.grand_total)}</td>
+  `;
+  tbody.appendChild(totalRow);
+
+  breakdownCard.appendChild(table);
+  el.appendChild(breakdownCard);
+
+  // ── Reconciliation ────────────────────────────────────────────────
+  const reconCard = div('card');
+  const ok = d.reconciliation.matches_bill;
+  reconCard.innerHTML = `
+    <div class="section-title">Reconciliation</div>
+    <span class="recon-badge ${ok ? 'recon-ok' : 'recon-fail'}">
+      ${ok ? '✓' : '✗'}
+      Sum of person totals ${rs(d.reconciliation.sum_of_person_totals)}
+      ${ok ? 'matches' : 'does NOT match'} bill grand total ${rs(d.grand_total)}
+    </span>
+  `;
+  el.appendChild(reconCard);
+
+  // ── Paid by + Settle-up ───────────────────────────────────────────
+  if (d.settle_up && d.settle_up.length > 0) {
+    const settleCard = div('card');
+    settleCard.innerHTML = `
+      <div class="section-title">Settle Up</div>
+      ${d.paid_by ? `<div style="margin-bottom:14px"><span class="paid-by-chip">💳 Paid by ${esc(d.paid_by)}</span></div>` : ''}
+    `;
+    const list = div('settle-list');
+    for (const s of d.settle_up) {
+      const item = div('settle-item');
+      item.innerHTML = `
+        <span><strong class="payer">${esc(s.from)}</strong> <span class="arrow">→</span> ${esc(s.to)}</span>
+        <span class="amount">${rs(s.amount)}</span>
+      `;
+      list.appendChild(item);
+    }
+    settleCard.appendChild(list);
+    el.appendChild(settleCard);
+  } else if (d.paid_by) {
+    const settleCard = div('card');
+    settleCard.innerHTML = `
+      <div class="section-title">Settle Up</div>
+      <span class="paid-by-chip">💳 ${esc(d.paid_by)} paid — no settle-up entries</span>
+    `;
+    el.appendChild(settleCard);
+  }
+
+  // ── Flags ─────────────────────────────────────────────────────────
+  if (d.flags && d.flags.length > 0) {
+    const flagCard = div('card');
+    flagCard.innerHTML = `<div class="section-title">⚠ Flags (${d.flags.length})</div>`;
+    const list = div('flag-list');
+    for (const f of d.flags) {
+      const item = div('flag-item');
+      item.innerHTML = `<span class="flag-icon">⚠️</span><span>${esc(f)}</span>`;
+      list.appendChild(item);
+    }
+    flagCard.appendChild(list);
+    el.appendChild(flagCard);
+  }
+
+  // ── Assumptions ───────────────────────────────────────────────────
+  if (d.assumptions && d.assumptions.length > 0) {
+    const asmCard = div('card');
+    asmCard.innerHTML = `<div class="section-title">Assumptions (${d.assumptions.length})</div>`;
+    const list = div('assumption-list');
+    for (const a of d.assumptions) {
+      const item = div('assumption-item');
+      item.innerHTML = `<span class="assumption-icon">ℹ️</span><span>${esc(a)}</span>`;
+      list.appendChild(item);
+    }
+    asmCard.appendChild(list);
+    el.appendChild(asmCard);
+  }
+}
+
+function showError(msg, extraFlags) {
+  const el = document.getElementById('results');
+  el.style.display = 'block';
+  let html = `<div class="error-box"><strong>Error:</strong> ${esc(msg)}</div>`;
+  if (extraFlags && extraFlags.length) {
+    html += `<div class="card" style="margin-top:12px">
+      <div class="section-title">Flags</div>
+      <div class="flag-list">
+        ${extraFlags.map(f => `<div class="flag-item"><span class="flag-icon">⚠️</span><span>${esc(f)}</span></div>`).join('')}
+      </div>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+function div(cls) {
+  const d = document.createElement('div');
+  d.className = cls;
+  return d;
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>
