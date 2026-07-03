@@ -4,7 +4,7 @@ Takes a photo of a restaurant bill plus a plain-English description of who had
 what, and returns a fair, fully-reconciled, per-person breakdown — tax, service
 charge, discounts, rounding, and a "who owes whom" settle-up.
 
-**Live demo:** `https://<your-railway-app>.up.railway.app` (frontend at `/`, API at `POST /split`)
+**Live demo:** `https://fair-split-production-51eb.up.railway.app/` (frontend at `/`, API at `POST /split`)
 
 ## How it works
 
